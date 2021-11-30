@@ -66,15 +66,14 @@ func resolve(qname string, qtype uint16, server string) *dns.Msg {
 	// check for errors
 	if err != nil {
 		log.Printf("%-30s: Error resolving %s (server %s)\n", qname, err, server)
-		return nil
+		return resolve(qname, qtype, server)
 	}
 	if r == nil {
 		log.Printf("%-30s: No answer (Server %s)\n", qname, server)
-		return nil
+		return resolve(qname, qtype, server)
 	}
 	if r.Rcode != dns.RcodeSuccess {
 		log.Printf("%-30s: %s (Rcode %d, Server %s)\n", qname, dns.RcodeToString[r.Rcode], r.Rcode, server)
-		return nil
 	}
 	return r
 }

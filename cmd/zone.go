@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
@@ -31,7 +32,7 @@ import (
 const (
 	TIMEOUT    time.Duration = 5 // seconds
 	CONCURRENT uint          = 3
-	EDNS0SIZE  uint16        = 1232
+	EDNS0SIZE  uint16        = 4096
 )
 
 // zoneCmd represents the zone command
@@ -132,8 +133,14 @@ func runZone(cmd *cobra.Command, args []string) {
 		log.Printf("%d domains found.\n", len(domainlist))
 	}
 
-	for _, d := range domainlist {
-		for _, rr := range d {
+	keys := make([]string, 0, len(domainlist))
+	for k := range domainlist {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, d := range keys {
+		for _, rr := range domainlist[d] {
 			fmt.Println(rr.String())
 		}
 	}
@@ -152,7 +159,7 @@ func getRrlist(dl *DomainList, dla *sync.Mutex, wg *sync.WaitGroup, threads <-ch
 	if verbose > 0 {
 		log.Printf("getRrlist: starting to resolve NS for %s\n", domain)
 	}
-	soa := resolve(domain, dns.TypeNS, server)
+	ns := resolve(domain, dns.TypeNS, server)
 	if verbose > 0 {
 		log.Printf("getRrlist: starting to resolve DNSKEY for %s\n", domain)
 	}
@@ -165,11 +172,20 @@ func getRrlist(dl *DomainList, dla *sync.Mutex, wg *sync.WaitGroup, threads <-ch
 	// save data to list
 	dla.Lock()
 	d := (*dl)[domain]
-	for _, rr := range soa.Answer {
+	if verbose > 0 {
+		log.Printf("getRrlist: %s found NS answer has %d RR\n", domain, len(ns.Answer))
+	}
+	for _, rr := range ns.Answer {
 		d = append(d, rr)
+	}
+	if verbose > 0 {
+		log.Printf("getRrlist: %s found DNSKEY answer has %d RR\n", domain, len(dnskey.Answer))
 	}
 	for _, rr := range dnskey.Answer {
 		d = append(d, rr)
+	}
+	if verbose > 0 {
+		log.Printf("getRrlist: %s found NS answer has %d RR\n", "nic."+domain, len(nic.Answer))
 	}
 	for _, rr := range nic.Answer {
 		d = append(d, rr)
