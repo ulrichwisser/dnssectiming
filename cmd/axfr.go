@@ -50,7 +50,7 @@ func axfr(zone string, server string, port uint) <-chan dns.RR {
 	// start transfer
 	channel, err := transfer.In(query, server)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("error starting AXFR", err)
 	}
 
 	// prepare output channel
@@ -60,7 +60,7 @@ func axfr(zone string, server string, port uint) <-chan dns.RR {
 	go func() {
 		for env := range channel {
 			if env.Error != nil {
-				log.Fatal(env.Error)
+				log.Fatal("FATAL ERROR reading data from AXFR: ", env.Error)
 			}
 			for _, rr := range env.RR {
 				c <- rr
