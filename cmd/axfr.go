@@ -19,6 +19,7 @@ package cmd
 import (
 	"fmt"
 	"log"
+	"net"
 	"strings"
 	"time"
 
@@ -30,7 +31,10 @@ import (
 func axfr(zone string, server string, port uint) <-chan dns.RR {
 
 	// Setting up transfer
-	transfer := &dns.Transfer{DialTimeout: 5 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 5 * time.Second}
+	d := net.Dialer{}
+	con, err := d.Dial("tcp", server)
+	dnscon := &dns.Conn{Conn: con, UDPSize: 65535}
+	transfer := &dns.Transfer{Conn: dnscon, DialTimeout: 5 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 5 * time.Second}
 
 	// Setting up query
 	query := new(dns.Msg)
