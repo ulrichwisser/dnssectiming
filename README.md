@@ -40,3 +40,8 @@ Currently only the MySQL DSN can be given in the config file. (see example confi
 |--resolvers | -r | ip address of a resolver (can be given several times)
 |--concurrent| -c | number of concurrent resolver threads
 
+# Compiling for Synology NAS
+
+```
+sudo docker run --rm -v "$PWD":/usr/src/myapp -w /usr/src/myapp golang:alpine ./syno.sh
+```
