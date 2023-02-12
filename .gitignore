@@ -4,6 +4,7 @@
 *.dll
 *.so
 *.dylib
+dnssectiming
 
 # Test binary, built with `go test -c`
 *.test
