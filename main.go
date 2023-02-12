@@ -325,9 +325,12 @@ func saveAnswers(answers chan *dns.Msg, wg *sync.WaitGroup, db *sql.DB) {
 		var rrsig *dns.RRSIG
 		var rrdata []string
 		for _,rr:= range msg.Answer {
-			rrdata = append(rrdata, rr.String());
-			if rr.Header().Rrtype == dns.TypeRRSIG && (rrsig == nil || rr.(*dns.RRSIG).Algorithm > rrsig.Algorithm) {
-				rrsig = rr.(*dns.RRSIG)
+			if rr.Header().Rrtype == dns.TypeRRSIG {
+				if rrsig == nil || rr.(*dns.RRSIG).Algorithm > rrsig.Algorithm {
+					rrsig = rr.(*dns.RRSIG)
+				}
+			} else {
+				rrdata = append(rrdata, rr.String());
 			}
 		}
 		if rrsig == nil {
