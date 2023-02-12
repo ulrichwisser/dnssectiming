@@ -19,11 +19,12 @@ package main
 import (
 	"os"
 	"fmt"
-	"sync"
-	"bufio"
 	"net"
-	"strings"
+	"sort"
+	"sync"
 	"time"
+	"bufio"
+	"strings"
 
 	homedir "github.com/mitchellh/go-homedir"
 
@@ -71,9 +72,6 @@ var rootCmd = &cobra.Command{
 }
 
 func main() {
-	// default logging to STDERR
-	log.SetHandler(text.New(os.Stderr))
-
 	// Use flags for viper values
 	viper.BindPFlags(pflag.CommandLine)
 
@@ -129,7 +127,12 @@ func run(args []string) {
 		case VERBOSE_WARNING: 	log.SetLevel(log.WarnLevel)
 		case VERBOSE_INFO:    	log.SetLevel(log.InfoLevel)
 		case VERBOSE_DEBUG:   	log.SetLevel(log.DebugLevel)
-		default: 				log.SetLevel(log.ErrorLevel)
+		default: 				
+			if viper.GetInt(VERBOSE) > VERBOSE_DEBUG {
+				log.SetLevel(log.DebugLevel)
+			} else {
+				log.SetLevel(log.ErrorLevel)
+			}
 	}
 
 	// If a config file is found, read it in.
@@ -320,23 +323,22 @@ func saveAnswers(answers chan *dns.Msg, wg *sync.WaitGroup, db *sql.DB) {
 	for msg := range answers {
 
 		var rrsig *dns.RRSIG
-		var rrdata string
+		var rrdata []string
 		for _,rr:= range msg.Answer {
-			rrdata += rr.String() + "\n";
-			if rr.Header().Rrtype == dns.TypeRRSIG {
-				sig := rr.(*dns.RRSIG)
-				if rrsig == nil || sig.Algorithm > rrsig.Algorithm {
-					rrsig = sig
-				}  
+			rrdata = append(rrdata, rr.String());
+			if rr.Header().Rrtype == dns.TypeRRSIG && (rrsig == nil || rr.(*dns.RRSIG).Algorithm > rrsig.Algorithm) {
+				rrsig = rr.(*dns.RRSIG)
 			}
 		}
 		if rrsig == nil {
 			log.Infof("%s is not signed. ", msg.Question[0].Name)
 			continue
 		}
-		sha256 := fmt.Sprintf("%x", sha256.Sum256([]byte(rrdata)))
+		sort.Strings(rrdata) // sort is need to normalize strings, dns answers with round robin data
+		rrdata_str := strings.Join(rrdata,"\n")
+		sha256 := fmt.Sprintf("%x", sha256.Sum256([]byte(rrdata_str)))
 
-		_,err = stmt_rrdata.Exec(sha256, rrdata)
+		_,err = stmt_rrdata.Exec(sha256, rrdata_str)
 		if err != nil {
 			log.Fatalf("Writing to RRDATA failed %s", err)
 		}
