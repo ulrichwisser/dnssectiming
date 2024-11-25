@@ -93,7 +93,7 @@ func init() {
 
 	// define command line arguments
 	rootCmd.Flags().CountP(VERBOSE, "v", "repeat for more verbose printouts")
-	rootCmd.Flags().UintP(CONCURRENT, "c", CONCURRENT_DEFAULT, "config file (default is $HOME/.umpy)")
+	rootCmd.Flags().UintP(CONCURRENT, "c", CONCURRENT_DEFAULT, "number of concurrent resolver queries")
 	rootCmd.Flags().StringSliceP(RESOLVERS, "r", []string{}, "resolver ip address")
 
 	// Use flags for viper values
@@ -273,8 +273,18 @@ func resolve(domain string, server string, wg *sync.WaitGroup, threads <-chan st
 	for _,rrtype := range []uint16{dns.TypeSOA, dns.TypeNS, dns.TypeDNSKEY, dns.TypeDS} {
 		query.SetQuestion(domain, rrtype)
 
+		// limit repeats
+		var repeat int = 0
 		// query until we get an answer
 		for {
+
+			// limit repeats
+			repeat++
+			if repeat > 100 {
+				log.Errorf("%-30s: 100 repeats reached (server %s)", domain, server)
+                break
+            }
+
 			// make the query and wait for answer
 			r, _, err := client.Exchange(query, server)
 
