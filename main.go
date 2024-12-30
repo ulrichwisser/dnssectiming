@@ -35,7 +35,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/apex/log"
-	"github.com/apex/log/handlers/text"
+	"github.com/apex/log/handlers/logfmt"
 
 	"database/sql"
     _ "github.com/go-sql-driver/mysql"
@@ -52,7 +52,7 @@ const VERBOSE_DEBUG int = 4
 const VERBOSE_TRACE int = 5
 
 const CONCURRENT = "concurrent"
-const CONCURRENT_DEFAULT uint = 100
+const CONCURRENT_DEFAULT uint = 50
 
 const DBCREDENTIALS = "dbcredentials"
 
@@ -83,7 +83,7 @@ func main() {
 
 func init() {
 	// Set default log handler
-	log.SetHandler(text.New(os.Stderr))
+	log.SetHandler(logfmt.New(os.Stderr))
 
 	// Set defaults
 	//
@@ -177,6 +177,7 @@ func run(args []string) {
 			log.Error(err.Error())
 			os.Exit(5)
 		}
+		defer domainlistfh.Close()
 	} else {
 		domainlistfh = os.Stdin
 	}
@@ -202,8 +203,16 @@ func run(args []string) {
 		if err := scanner.Err(); err != nil {
 			log.Fatalf("Failed to read domain list: %s", err.Error())
 		}
-		wg.Add(1)
+		if (strings.HasPrefix(domain, "#")) {
+			continue
+		}
+		domain = strings.TrimSpace(domain)
+		if (domain == "") {
+			continue
+		}
+		domain = strings.ToLower(domain)
 		threads <- "x"
+		wg.Add(1)
 		go resolve(dns.Fqdn(domain), resolvers[resolver], &wg, threads, answers)
 		resolver = (resolver + 1) % len(resolvers)
 	}
@@ -213,10 +222,6 @@ func run(args []string) {
 	close(answers)
 	wg.Wait()
 
-	// close the file we opened
-	if len(args) > 0 {
-		domainlistfh.Close()
-	}
 	log.Debug("Done reading domain list.")
 }
 
@@ -269,6 +274,7 @@ func resolve(domain string, server string, wg *sync.WaitGroup, threads <-chan st
 	// Setting up resolver
 	client := new(dns.Client)
 	client.ReadTimeout = TIMEOUT * 1e9
+	client.Net = "tcp"
 
 	for _,rrtype := range []uint16{dns.TypeSOA, dns.TypeNS, dns.TypeDNSKEY, dns.TypeDS} {
 		query.SetQuestion(domain, rrtype)
@@ -280,8 +286,9 @@ func resolve(domain string, server string, wg *sync.WaitGroup, threads <-chan st
 
 			// limit repeats
 			repeat++
-			if repeat > 100 {
-				log.Errorf("%-30s: 100 repeats reached (server %s)", domain, server)
+			log.Debugf("%-30s: %d repeats reached (server %s, %s)", domain, repeat, server, dns.TypeToString[rrtype])
+			if repeat > 10 {
+				log.Errorf("%-30s: 10 repeats reached (server %s)", domain, server)
                 break
             }
 
@@ -310,6 +317,7 @@ func resolve(domain string, server string, wg *sync.WaitGroup, threads <-chan st
 }
 
 func saveAnswers(answers chan *dns.Msg, wg *sync.WaitGroup, db *sql.DB) {
+	var err error
 	defer log.Trace("saving answers").Stop(nil)
 
 	tx, err := db.Begin()
@@ -344,7 +352,7 @@ func saveAnswers(answers chan *dns.Msg, wg *sync.WaitGroup, db *sql.DB) {
 			}
 		}
 		if rrsig == nil {
-			log.Infof("%s is not signed. ", msg.Question[0].Name)
+			log.Infof("%s %s is not signed. ", msg.Question[0].Name, dns.TypeToString[msg.Question[0].Qtype])
 			continue
 		}
 		sort.Strings(rrdata) // sort is need to normalize strings, dns answers with round robin data
@@ -360,7 +368,7 @@ func saveAnswers(answers chan *dns.Msg, wg *sync.WaitGroup, db *sql.DB) {
 		if err != nil {
 			log.Fatalf("Writing to RRSIG failed %s", err)
 		}
-		
+		fmt.Println(rrdata_str)		
 	}
 	err = tx.Commit()
 	if err != nil {
