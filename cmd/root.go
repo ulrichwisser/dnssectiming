@@ -17,7 +17,6 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 package cmd
 
 import (
-	"fmt"
 	"os"
 
 	homedir "github.com/mitchellh/go-homedir"
@@ -37,7 +36,6 @@ var rootCmd = &cobra.Command{
 	Version: "0.0.1a",
 	Short:   "get dnssec timing information",
 	Long:    `get dnssec timing information`,
-	Run:     func(cmd *cobra.Command, args []string) { rootRun(args) },
 }
 
 func init() {
@@ -83,7 +81,6 @@ func initConfig() {
 		log.Debugf("Using config file: %s", viper.ConfigFileUsed())
 	}
 
-	fmt.Println("LogLevel will be set to ", viper.GetInt(VERBOSE))
 	// init log level
 	switch viper.GetInt(VERBOSE) {
 	case VERBOSE_QUIET:
@@ -110,8 +107,4 @@ func Execute() {
 	if err != nil {
 		os.Exit(1)
 	}
-}
-
-func rootRun(args []string) {
-	log.Fatal("Who called the root command?")
 }
