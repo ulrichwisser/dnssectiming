@@ -112,6 +112,7 @@ func lifetimeRun(args []string) {
 			log.Fatalf("Could not parse SOA record >%<\n%s", rrdata, err)
 		}
 		soaByDate[resolved] = rr.(*dns.SOA).Expire
+		log.Debugf("%s %s Expire %d\n", resolved.Format(time.DateOnly), tld, soaByDate[resolved])
 	}
 
 	//
@@ -136,6 +137,7 @@ func lifetimeRun(args []string) {
 		}
 		lifetime := expiration.UTC().Unix() - resolved.UTC().Unix()
 		fmt.Printf("%s %d %d\n", resolved.Format(time.DateOnly), lifetime, expire)
+		log.Debugf("%s %s Lifetime: %s (%d) Expire: %s (%d)", resolved.Format(time.DateOnly), tld, sec2str(lifetime), lifetime, sec2str(int64(expire)), expire)
 	}
 
 }
