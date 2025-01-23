@@ -132,7 +132,7 @@ func lifetimeRun(args []string) {
 		}
 		expire, ok := soaByDate[resolved]
 		if !ok {
-			log.Fatalf("No SOA expire for date %s", resolved.Format(time.DateOnly))
+			continue
 		}
 		lifetime := expiration.UTC().Unix() - resolved.UTC().Unix()
 		fmt.Printf("%s %d %d\n", resolved.Format(time.DateOnly), lifetime, expire)
