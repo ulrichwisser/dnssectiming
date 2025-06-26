@@ -1,5 +1,5 @@
 #
-# usage: gnuplot -c gnuplot/lifet.plt TLS RRTYPE
+# usage: gnuplot -c gnuplot/lifet.plt TLD RRTYPE
 #
 tld=ARG1
 rr=ARG2
@@ -13,12 +13,12 @@ title_lifetime = sprintf("RRSIG Lifetime of %s records", rr)
 stats filename u 2 nooutput
 MAX_LIFETIME=STATS_max
 stats filename u 3 nooutput
-MAX_EXPIRE=STATS_max
+MAX_EXPIRE=3*STATS_max
 MAX_Y=MAX_LIFETIME
 if (MAX_Y<MAX_EXPIRE) {
     MAX_Y=MAX_EXPIRE
 }
-MAX_Y=MAX_Y+(MAX_Y/100)
+MAX_Y=MAX_Y*1.1
 set yrange [0:MAX_Y]
 
 set style data lines
@@ -41,4 +41,4 @@ set ytics add ( "1h" 3600, "1d" 84600, "7d" 604800, "14d" 1209600, "30d" 2592000
 set terminal png size 1024,768
 set output outputname
 
-plot filename using 1:2 title title_lifetime, filename using 1:3 title "SOA Expire"
+plot filename using 1:2 title title_lifetime, filename using 1:3 title "SOA Expire", filename using 1:(3*$3) title "RFC 6781 Minimum Liftetime"
