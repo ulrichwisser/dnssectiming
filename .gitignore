@@ -15,3 +15,11 @@ dnssectiming
 # Dependency directories (remove the comment below to include it)
 # vendor/
 data/
+
+# TLD list produced by gettldlist.sh
+cctlds.txt
+gtlds.txt
+tlds-alpha-by-domain.txt
+
+# compressed data package
+*.tar.gz
