@@ -47,7 +47,6 @@ func init() {
 	rootCmd.AddCommand(failedCmd)
 
 	// define command line arguments
-	failedCmd.Flags().StringP(TLD, TLD_SHORT, TLD_DEFAULT, TLD_DESCRIPTION)
 	failedCmd.Flags().StringP(RR, RR_SHORT, RR_DEFAULT, RR_DESCRIPTION)
 
 	// Use flags for viper values
