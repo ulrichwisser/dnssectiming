@@ -261,7 +261,7 @@ func saveAnswers(answers chan *dns.Msg, wg *sync.WaitGroup, db *sql.DB) {
 		var rrdata []string
 		for _, rr := range msg.Answer {
 			if rr.Header().Rrtype == dns.TypeRRSIG {
-				if rrsig == nil || rr.(*dns.RRSIG).Algorithm > rrsig.Algorithm {
+				if rrsig == nil || rr.(*dns.RRSIG).Expiration > rrsig.Expiration {
 					rrsig = rr.(*dns.RRSIG)
 				}
 			} else {
