@@ -1,5 +1,5 @@
 #
-# usage: gnuplot -c gnuplot/lifet.plt TLS RRTYPE
+# usage: gnuplot -c gnuplot/expire.plt
 #
 filename = "data/expire.data"
 outputname = "data/expire.png"
