@@ -124,12 +124,24 @@ func lifetimeRun(args []string) {
 	}
 	defer rrData.Close() // Prepared statements take up server resources and should be closed after use.
 
+	var first bool = true
+	var lastResolved time.Time
 	for rrData.Next() {
 		var resolved time.Time
 		var expiration time.Time
 		err := rrData.Scan(&resolved, &expiration)
 		if err != nil {
 			log.Fatalf("Error scanning RR data. %s", err)
+		}
+		// check for dates without data
+		if first {
+			lastResolved = normalizeDay(resolved)
+			first = false
+		}
+        var currResolved = normalizeDay(resolved)
+		for d := lastResolved.AddDate(0, 0, 1); d.Before(currResolved); d = d.AddDate(0, 0, 1) {
+    		fmt.Printf("%s NaN NaN\n", d.Format(time.DateOnly))
+			log.Debugf("%s %s Missing date", d.Format(time.DateOnly), tld)
 		}
 		expire, ok := soaByDate[resolved]
 		if !ok {
@@ -138,6 +150,7 @@ func lifetimeRun(args []string) {
 		lifetime := expiration.UTC().Unix() - resolved.UTC().Unix()
 		fmt.Printf("%s %d %d\n", resolved.Format(time.DateOnly), lifetime, expire)
 		log.Debugf("%s %s Lifetime: %s (%d) Expire: %s (%d)", resolved.Format(time.DateOnly), tld, sec2str(lifetime), lifetime, sec2str(int64(expire)), expire)
+		lastResolved = currResolved
 	}
 
 }
