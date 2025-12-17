@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 func sec2str(seconds int64) string {
@@ -28,4 +29,9 @@ func sec2str(seconds int64) string {
 	}
 
 	return strings.TrimSpace(ret_str)
+}
+
+func normalizeDay(t time.Time) time.Time {
+    y, m, d := t.Date()
+    return time.Date(y, m, d, 0, 0, 0, 0, t.Location())
 }
