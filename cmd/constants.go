@@ -40,7 +40,7 @@ const TLD_DESCRIPTION = "give TLD name to evalute"
 
 const RR = "rr"
 const RR_SHORT = "r"
-const RR_DEFAULT = "NS"
+const RR_DEFAULT = ""
 const RR_DESCRIPTION = "which RR set is used for evaluation. Possible values NS or DNSKEY"
 
 const DBCREDENTIALS = "dbcredentials"
