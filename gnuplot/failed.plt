@@ -1,5 +1,5 @@
 #
-# usage: gnuplot -c gnuplot/lifet.plt TLD RRTYPE
+# usage: gnuplot -c gnuplot/lifet.plt RRTYPE
 #
 rr=ARG1
 
