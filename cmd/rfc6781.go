@@ -62,12 +62,6 @@ var rfc6781Cmd = &cobra.Command{
 func init() {
 	// add the command to cobra
 	rootCmd.AddCommand(rfc6781Cmd)
-
-	// define command line arguments
-	rfc6781Cmd.Flags().StringP(RR, RR_SHORT, RR_DEFAULT, RR_DESCRIPTION)
-
-	// Use flags for viper values
-	viper.BindPFlags(rfc6781Cmd.Flags())
 }
 
 func rfc6781Run(args []string) {
@@ -131,6 +125,7 @@ func rfc6781Run(args []string) {
 
 		// save data
 		soaByDateTLD[resolved][tld] = rr.(*dns.SOA).Expire
+		log.Debugf("%s %s Expire %d\n", resolved.Format(time.DateOnly), tld, soaByDateTLD[resolved][tld])
 	}
 
 	//
@@ -166,8 +161,12 @@ func rfc6781Run(args []string) {
 		// save data
 		switch {
         case int64(expire) <  3 * lifetime:	failedByDateTLD[resolved][tld] = -1 // too short
+		                                    log.Debugf("%s %s short", resolved.Format(time.DateOnly), tld, )
         case int64(expire) <= 4 * lifetime: failedByDateTLD[resolved][tld] =  0 // correct
+		                                    log.Debugf("%s %s ok", resolved.Format(time.DateOnly), tld, )
         case 4 * lifetime <  int64(expire):	failedByDateTLD[resolved][tld] =  1 // too long
+		                                    log.Debugf("%s %s long", resolved.Format(time.DateOnly), tld, )
+		default: log.Fatalf("%s %s  IS NOT CATEGORIZED!!! Lifetime %d  Expire %d", resolved.Format(time.DateOnly), tld, lifetime, expire)
 		}
 	}
 
@@ -175,9 +174,11 @@ func rfc6781Run(args []string) {
 	// compute daily summary
 	//
 	type dateStats struct {
+		cctld     int
 		ccShort   int
 		ccOK      int
 		ccLong    int
+		gtld      int
 		gtldShort int
 		gtldOK    int
 		gtldLong  int
@@ -191,16 +192,20 @@ func rfc6781Run(args []string) {
 			}
 
 			if len(tld) == 3 {
+				statsByDate[resolved].cctld++
 				switch failedByDateTLD[resolved][tld] {
 				case -1: statsByDate[resolved].ccShort++
 				case  0: statsByDate[resolved].ccOK++
 				case  1: statsByDate[resolved].ccLong++
+				default: log.Fatalf("%s %s CCTLD no category %d", resolved.Format(time.DateOnly), tld, failedByDateTLD[resolved][tld])
 				}
 			} else {
+				statsByDate[resolved].gtld++
 				switch failedByDateTLD[resolved][tld] {
 				case -1: statsByDate[resolved].gtldShort++
 				case  0: statsByDate[resolved].gtldOK++
 				case  1: statsByDate[resolved].gtldLong++
+				default: log.Fatalf("%s %s GTLD no category %d", resolved.Format(time.DateOnly), tld, failedByDateTLD[resolved][tld])
 				}
 			}
 		}
@@ -215,7 +220,7 @@ func rfc6781Run(args []string) {
 
 	// output final result
 	for _, resolved := range resolvedList {
-		fmt.Printf("%s %d %d %d %d %d %d\n", resolved.Format(time.DateOnly), statsByDate[resolved].ccShort, statsByDate[resolved].ccOK, statsByDate[resolved].ccLong, statsByDate[resolved].gtldShort, statsByDate[resolved].gtldOK, statsByDate[resolved].gtldLong)
+		fmt.Printf("%s %d %d %d %d %d %d %d %d\n", resolved.Format(time.DateOnly), statsByDate[resolved].cctld, statsByDate[resolved].ccShort, statsByDate[resolved].ccOK, statsByDate[resolved].ccLong, statsByDate[resolved].gtld, statsByDate[resolved].gtldShort, statsByDate[resolved].gtldOK, statsByDate[resolved].gtldLong)
 	}
 
 }
