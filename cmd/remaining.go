@@ -62,12 +62,6 @@ var remainingCmd = &cobra.Command{
 func init() {
 	// add the command to cobra
 	rootCmd.AddCommand(remainingCmd)
-
-	// define command line arguments
-	remainingCmd.Flags().StringP(RR, RR_SHORT, RR_DEFAULT, RR_DESCRIPTION)
-
-	// Use flags for viper values
-	viper.BindPFlags(remainingCmd.Flags())
 }
 
 func remainingRun(args []string) {
@@ -110,7 +104,6 @@ func remainingRun(args []string) {
 	defer rrData.Close() // Prepared statements take up server resources and should be closed after use.
 
 	//
-	const under12h int64 = 43200
 	const under1d int64 = 86400
 	const under3d int64 = 259200
 	const under7d int64 = 604800
@@ -140,9 +133,8 @@ func remainingRun(args []string) {
 
 		// save data
 		switch {
-		case lifetime <under12h: remaining[resolved][under12h] += 1
-								 log.Infof("TLD %s Lifetime %d (expiration %s (%d), resolved %s (%d))\n",tld,lifetime,expiration.Format(time.DateTime),expiration.UTC().Unix(), resolved.Format(time.DateTime),resolved.UTC().Unix())	
 		case lifetime <under1d: remaining[resolved][under1d] += 1
+								 log.Infof("TLD %s Lifetime %d (expiration %s (%d), resolved %s (%d))\n",tld,lifetime,expiration.Format(time.DateTime),expiration.UTC().Unix(), resolved.Format(time.DateTime),resolved.UTC().Unix())	
 		case lifetime <under3d: remaining[resolved][under3d] += 1
 		case lifetime <under7d: remaining[resolved][under7d] += 1
 		case lifetime <under14d: remaining[resolved][under14d] += 1
@@ -159,7 +151,7 @@ func remainingRun(args []string) {
 
 	// output final result
 	for _, resolved := range resolvedList {
-		fmt.Printf("%s %d %d %d %d %d %d\n", resolved.Format(time.DateOnly), remaining[resolved][under12h], remaining[resolved][under1d], remaining[resolved][under3d], remaining[resolved][under7d], remaining[resolved][under14d], remaining[resolved][under35d])
+		fmt.Printf("%s %d %d %d %d %d\n", resolved.Format(time.DateOnly), remaining[resolved][under1d], remaining[resolved][under3d], remaining[resolved][under7d], remaining[resolved][under14d], remaining[resolved][under35d])
 	}
 
 }
