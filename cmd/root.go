@@ -43,6 +43,8 @@ func init() {
 
 	// define command line arguments
 	rootCmd.PersistentFlags().CountP(VERBOSE, "v", "repeat for more verbose printouts")
+	rootCmd.PersistentFlags().StringP(RR, RR_SHORT, RR_DEFAULT, RR_DESCRIPTION)
+	rootCmd.PersistentFlags().StringP(TLD, TLD_SHORT, TLD_DEFAULT, TLD_DESCRIPTION)
 
 	// Use flags for viper values
 	viper.BindPFlags(rootCmd.Flags())
@@ -103,6 +105,7 @@ func initConfig() {
 }
 
 func Execute() {
+	// Now run the command
 	err := rootCmd.Execute()
 	if err != nil {
 		os.Exit(1)
