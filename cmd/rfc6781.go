@@ -35,11 +35,11 @@ import (
 )
 
 // rootCmd represents the base command when called without any subcommands
-var failedCmd = &cobra.Command{
-	Use:     "failed",
+var rfc6781Cmd = &cobra.Command{
+	Use:     "rfc6781",
 	Version: "0.0.1a",
-	Short:   "get DNSSEC timing data for specific TLD and rr type",
-	Long:    "get DNSSEC timing data for specific TLD and rr type",
+	Short:   "get DNSSEC timing data all TLD for RFC 6781 recommendations",
+	Long:   "get DNSSEC timing data all TLD for RFC 6781 recommendations",
 	Run:     func(cmd *cobra.Command, args []string) { 
 		// debug command line arguments
 		log.Debug("Flags:")
@@ -55,19 +55,22 @@ var failedCmd = &cobra.Command{
 		log.Debugf("tld from viper: %s", viper.GetString(TLD))
 
 		// now run the command
-		failedRun(args) 
+		rfc6781Run(args) 
 	},
 }
 
 func init() {
 	// add the command to cobra
-	rootCmd.AddCommand(failedCmd)
+	rootCmd.AddCommand(rfc6781Cmd)
+
+	// define command line arguments
+	rfc6781Cmd.Flags().StringP(RR, RR_SHORT, RR_DEFAULT, RR_DESCRIPTION)
 
 	// Use flags for viper values
-	viper.BindPFlags(failedCmd.Flags())
+	viper.BindPFlags(rfc6781Cmd.Flags())
 }
 
-func failedRun(args []string) {
+func rfc6781Run(args []string) {
 
 	// check RR command line arguments
 	var rrtype uint16 = 0
@@ -81,7 +84,6 @@ func failedRun(args []string) {
 	if rrtype == 0 {
 		log.Fatal("No valid RR type was given. Must be one of NS or DNSKEY")
 	}
-	log.Debugf("RRTYPE %s %d", rr_str, rrtype)
 
 	// open database
 	if viper.GetString(DBCREDENTIALS) == "" {
@@ -101,6 +103,7 @@ func failedRun(args []string) {
 	//
 	// Get SOA Expire
 	//
+	log.Debug("Start SQL Expire")
 	soaData, err := db.Query("SELECT RESOLVED,TLD,RRDATA FROM RRSIG JOIN RRDATA ON(RRSIG.SHA256=RRDATA.SHA256) WHERE RRTYPE=? ORDER BY RESOLVED,TLD ", dns.TypeSOA)
 	if err != nil {
 		log.Fatalf("Could not query for SOA data %s", err)
@@ -133,13 +136,14 @@ func failedRun(args []string) {
 	//
 	// Get lifetime
 	//
-	rrData, err := db.Query("SELECT RESOLVED,TLD,EXPIRATION FROM RRSIG WHERE RRTYPE=? ORDER BY RESOLVED,TLD ", rrtype)
+	log.Debug("Start SQL")
+	rrData, err := db.Query("SELECT RESOLVED,TLD,EXPIRATION FROM RRSIG WHERE RRTYPE=? ORDER BY RESOLVED,TLD", rrtype)
 	if err != nil {
 		log.Fatalf("Could not query for %s data %s", rr_str, err)
 	}
 	defer rrData.Close() // Prepared statements take up server resources and should be closed after use.
 
-	var failedByDateTLD map[time.Time]map[string]bool = make(map[time.Time]map[string]bool, 0)
+	var failedByDateTLD map[time.Time]map[string]int = make(map[time.Time]map[string]int, 0)
 	for rrData.Next() {
 		var resolved time.Time
 		var tld string
@@ -156,21 +160,27 @@ func failedRun(args []string) {
 
 		// prepare data structure
 		if _, ok := failedByDateTLD[resolved]; !ok {
-			failedByDateTLD[resolved] = make(map[string]bool, 0)
+			failedByDateTLD[resolved] = make(map[string]int, 0)
 		}
 
 		// save data
-		failedByDateTLD[resolved][tld] = lifetime < int64(expire)
+		switch {
+        case int64(expire) <  3 * lifetime:	failedByDateTLD[resolved][tld] = -1 // too short
+        case int64(expire) <= 4 * lifetime: failedByDateTLD[resolved][tld] =  0 // correct
+        case 4 * lifetime <  int64(expire):	failedByDateTLD[resolved][tld] =  1 // too long
+		}
 	}
 
 	//
 	// compute daily summary
 	//
 	type dateStats struct {
-		ccOK     int
-		ccFail   int
-		gtldOK   int
-		gtldFail int
+		ccShort   int
+		ccOK      int
+		ccLong    int
+		gtldShort int
+		gtldOK    int
+		gtldLong  int
 	}
 	var statsByDate map[time.Time]*dateStats = make(map[time.Time]*dateStats, 0)
 	for resolved := range failedByDateTLD {
@@ -181,16 +191,16 @@ func failedRun(args []string) {
 			}
 
 			if len(tld) == 3 {
-				if failedByDateTLD[resolved][tld] {
-					statsByDate[resolved].ccFail++
-				} else {
-					statsByDate[resolved].ccOK++
+				switch failedByDateTLD[resolved][tld] {
+				case -1: statsByDate[resolved].ccShort++
+				case  0: statsByDate[resolved].ccOK++
+				case  1: statsByDate[resolved].ccLong++
 				}
 			} else {
-				if failedByDateTLD[resolved][tld] {
-					statsByDate[resolved].gtldFail++
-				} else {
-					statsByDate[resolved].gtldOK++
+				switch failedByDateTLD[resolved][tld] {
+				case -1: statsByDate[resolved].gtldShort++
+				case  0: statsByDate[resolved].gtldOK++
+				case  1: statsByDate[resolved].gtldLong++
 				}
 			}
 		}
@@ -205,7 +215,7 @@ func failedRun(args []string) {
 
 	// output final result
 	for _, resolved := range resolvedList {
-		fmt.Printf("%s %d %d %d %d\n", resolved.Format(time.DateOnly), statsByDate[resolved].ccOK, statsByDate[resolved].ccFail, statsByDate[resolved].gtldOK, statsByDate[resolved].gtldFail)
+		fmt.Printf("%s %d %d %d %d %d %d\n", resolved.Format(time.DateOnly), statsByDate[resolved].ccShort, statsByDate[resolved].ccOK, statsByDate[resolved].ccLong, statsByDate[resolved].gtldShort, statsByDate[resolved].gtldOK, statsByDate[resolved].gtldLong)
 	}
 
 }

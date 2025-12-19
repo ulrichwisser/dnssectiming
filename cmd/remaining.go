@@ -18,6 +18,7 @@ package cmd
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/miekg/dns"
@@ -33,11 +34,12 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-var lifetimeCmd = &cobra.Command{
-	Use:     "lifetime --tld <name> --rr <NS|DNSKEY>",
+// rootCmd represents the base command when called without any subcommands
+var remainingCmd = &cobra.Command{
+	Use:     "remaining --rr <NS|DNSKEY>",
 	Version: "0.0.1a",
-	Short:   "get DNSSEC timing data for specific TLD and rr type",
-	Long:    "get DNSSEC timing data for specific TLD and rr type",
+	Short:   "get DNSSEC timing data for rr type",
+	Long:    "get DNSSEC timing data for rr type",
 	Run:     func(cmd *cobra.Command, args []string) { 
 		// debug command line arguments
 		log.Debug("Flags:")
@@ -53,24 +55,22 @@ var lifetimeCmd = &cobra.Command{
 		log.Debugf("tld from viper: %s", viper.GetString(TLD))
 
 		// now run the command
-		lifetimeRun(args) 
+		remainingRun(args) 
 	},
 }
 
 func init() {
 	// add the command to cobra
-	rootCmd.AddCommand(lifetimeCmd)
+	rootCmd.AddCommand(remainingCmd)
+
+	// define command line arguments
+	remainingCmd.Flags().StringP(RR, RR_SHORT, RR_DEFAULT, RR_DESCRIPTION)
+
+	// Use flags for viper values
+	viper.BindPFlags(remainingCmd.Flags())
 }
 
-func lifetimeRun(args []string) {
-
-	// check TLD command line arguments
-	var tld = viper.GetString(TLD)
-	if len(tld) < 2 {
-		log.Fatal("No valid TLD value was given")
-	}
-	tld = dns.Fqdn(tld)
-	log.Debugf("TLD: %s", tld)
+func remainingRun(args []string) {
 
 	// check RR command line arguments
 	var rrtype uint16 = 0
@@ -84,7 +84,6 @@ func lifetimeRun(args []string) {
 	if rrtype == 0 {
 		log.Fatal("No valid RR type was given. Must be one of NS or DNSKEY")
 	}
-	log.Debugf("RRTYPE %s %d", rr_str, rrtype)
 
 	// open database
 	if viper.GetString(DBCREDENTIALS) == "" {
@@ -102,67 +101,65 @@ func lifetimeRun(args []string) {
 	log.Debug("DB OPEN")
 
 	//
-	// Get SOA Expire
-	//
-	soaData, err := db.Query("SELECT RESOLVED,RRDATA FROM RRSIG JOIN RRDATA ON(RRSIG.SHA256=RRDATA.SHA256) WHERE TLD=? AND RRTYPE=? ORDER BY RESOLVED ", tld, dns.TypeSOA)
-	if err != nil {
-		log.Fatalf("Could not query for SOA data %s", err)
-	}
-	defer soaData.Close() // Prepared statements take up server resources and should be closed after use.
-
-	var soaByDate map[time.Time]uint32 = make(map[time.Time]uint32, 0)
-	for soaData.Next() {
-		var resolved time.Time
-		var rrdata string
-		err := soaData.Scan(&resolved, &rrdata)
-		if err != nil {
-			log.Fatalf("Error scanning SOA data %s", err)
-		}
-		rr, err := dns.NewRR(rrdata)
-		if err != nil {
-			log.Fatalf("Could not parse SOA record >%<\n%s", rrdata, err)
-		}
-		soaByDate[resolved] = rr.(*dns.SOA).Expire
-		log.Debugf("%s %s Expire %d\n", resolved.Format(time.DateOnly), tld, soaByDate[resolved])
-	}
-
-	//
 	// Get lifetime
 	//
-	rrData, err := db.Query("SELECT RESOLVED,EXPIRATION FROM RRSIG WHERE TLD=? AND RRTYPE=? ORDER BY RESOLVED ", tld, rrtype)
+	rrData, err := db.Query("SELECT RESOLVED,TLD,EXPIRATION FROM RRSIG WHERE RRTYPE=? ORDER BY RESOLVED,TLD ", rrtype)
 	if err != nil {
 		log.Fatalf("Could not query for %s data %s", rr_str, err)
 	}
 	defer rrData.Close() // Prepared statements take up server resources and should be closed after use.
 
-	var first bool = true
-	var lastResolved time.Time
+	//
+	const under12h int64 = 43200
+	const under1d int64 = 86400
+	const under3d int64 = 259200
+	const under7d int64 = 604800
+	const under14d int64 = 1209600
+	const under35d int64 = 3024000
+
+	var remaining map[time.Time]map[int64]uint = make(map[time.Time]map[int64]uint, 0)
+		
 	for rrData.Next() {
 		var resolved time.Time
+		var tld string
 		var expiration time.Time
-		err := rrData.Scan(&resolved, &expiration)
-		log.Debugf("Resolved: %v    Expiration: %v", resolved, expiration)
+		err := rrData.Scan(&resolved, &tld, &expiration)
 		if err != nil {
 			log.Fatalf("Error scanning RR data. %s", err)
 		}
-		// check for dates without data
-		if first {
-			lastResolved = normalizeDay(resolved)
-			first = false
-		}
-        var currResolved = normalizeDay(resolved)
-		for d := lastResolved.AddDate(0, 0, 1); d.Before(currResolved); d = d.AddDate(0, 0, 1) {
-    		fmt.Printf("%s NaN NaN\n", d.Format(time.DateOnly))
-			log.Debugf("%s %s Missing date", d.Format(time.DateOnly), tld)
-		}
-		expire, ok := soaByDate[resolved]
-		if !ok {
+		lifetime := expiration.UTC().Unix() - resolved.UTC().Unix()
+		if lifetime < 0{
+			// Signature too old, no meaningful statistic can be extracted
 			continue
 		}
-		lifetime := expiration.UTC().Unix() - resolved.UTC().Unix()
-		fmt.Printf("%s %d %d\n", resolved.Format(time.DateOnly), lifetime, expire)
-		log.Debugf("%s %s Lifetime: %s (%d) Expire: %s (%d) Expiration: %v", resolved.Format(time.DateOnly), tld, sec2str(lifetime), lifetime, sec2str(int64(expire)), expire, expiration)
-		lastResolved = currResolved
+
+		// prepare data structure
+		if _, ok := remaining[resolved]; !ok {
+			remaining[resolved] = make(map[int64]uint, 0)
+		}
+
+		// save data
+		switch {
+		case lifetime <under12h: remaining[resolved][under12h] += 1
+								 log.Infof("TLD %s Lifetime %d (expiration %s (%d), resolved %s (%d))\n",tld,lifetime,expiration.Format(time.DateTime),expiration.UTC().Unix(), resolved.Format(time.DateTime),resolved.UTC().Unix())	
+		case lifetime <under1d: remaining[resolved][under1d] += 1
+		case lifetime <under3d: remaining[resolved][under3d] += 1
+		case lifetime <under7d: remaining[resolved][under7d] += 1
+		case lifetime <under14d: remaining[resolved][under14d] += 1
+		case lifetime <under35d: remaining[resolved][under35d] += 1
+		}
+	}
+
+	// get sorted lists of resolved
+	var resolvedList []time.Time
+	for resolved := range remaining {
+		resolvedList = append(resolvedList, resolved)
+	}
+	sort.Slice(resolvedList, func(i, j int) bool { return resolvedList[i].Before(resolvedList[j]) })
+
+	// output final result
+	for _, resolved := range resolvedList {
+		fmt.Printf("%s %d %d %d %d %d %d\n", resolved.Format(time.DateOnly), remaining[resolved][under12h], remaining[resolved][under1d], remaining[resolved][under3d], remaining[resolved][under7d], remaining[resolved][under14d], remaining[resolved][under35d])
 	}
 
 }

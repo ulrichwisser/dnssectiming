@@ -23,6 +23,7 @@ import (
 	"github.com/miekg/dns"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	"github.com/apex/log"
@@ -38,7 +39,23 @@ var expireCmd = &cobra.Command{
 	Version: "0.0.1a",
 	Short:   "get DNSSEC timing data for specific TLD and rr type",
 	Long:    "get DNSSEC timing data for specific TLD and rr type",
-	Run:     func(cmd *cobra.Command, args []string) { expireRun(args) },
+	Run:     func(cmd *cobra.Command, args []string) { 
+		// debug command line arguments
+		log.Debug("Flags:")
+		cmd.Flags().VisitAll(func(f *pflag.Flag) { log.Debugf("  %s = %s (changed=%v)\n", f.Name, f.Value, f.Changed) })
+
+		rrFromFlag, _ := cmd.Flags().GetString(RR)
+		tldFromFlag, _ := cmd.Flags().GetString(TLD)
+
+		log.Debugf("rr  from flag: %s", rrFromFlag)
+		log.Debugf("tld from flag: %s", tldFromFlag)
+
+		log.Debugf("rr  from viper: %s", viper.GetString(RR))
+		log.Debugf("tld from viper: %s", viper.GetString(TLD))
+
+		// now run the command
+		expireRun(args) 
+	},
 }
 
 func init() {

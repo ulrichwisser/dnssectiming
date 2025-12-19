@@ -28,6 +28,7 @@ import (
 	"github.com/miekg/dns"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	"github.com/apex/log"
@@ -45,7 +46,23 @@ var measureCmd = &cobra.Command{
 	Version: "0.0.1a",
 	Short:   "get dnssec data and save to database",
 	Long:    `get dnssec timing information`,
-	Run:     func(cmd *cobra.Command, args []string) { measureRun(args) },
+	Run:     func(cmd *cobra.Command, args []string) { 
+		// debug command line arguments
+		log.Debug("Flags:")
+		cmd.Flags().VisitAll(func(f *pflag.Flag) { log.Debugf("  %s = %s (changed=%v)\n", f.Name, f.Value, f.Changed) })
+
+		rrFromFlag, _ := cmd.Flags().GetString(RR)
+		tldFromFlag, _ := cmd.Flags().GetString(TLD)
+
+		log.Debugf("rr  from flag: %s", rrFromFlag)
+		log.Debugf("tld from flag: %s", tldFromFlag)
+
+		log.Debugf("rr  from viper: %s", viper.GetString(RR))
+		log.Debugf("tld from viper: %s", viper.GetString(TLD))
+
+		// now run the command
+		measureRun(args) 
+	},
 	Args:    cobra.MaximumNArgs(1),
 }
 
